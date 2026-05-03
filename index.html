@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AR名刺（iPhone対応）</title>
+
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-aframe.prod.js"></script>
+
+  <style>
+    body { margin:0; overflow:hidden; }
+
+    #scanning-overlay {
+      position:absolute; inset:0;
+      display:flex; justify-content:center; align-items:center;
+      background:rgba(0,0,0,0.5); color:white;
+      font-size:1.5rem; z-index:5;
+    }
+
+    #playButton {
+      position:absolute;
+      bottom:20px; left:50%;
+      transform:translateX(-50%);
+      padding:12px 18px;
+      background:#007bff; color:white;
+      border-radius:8px;
+      font-size:1.2rem;
+      display:none;
+      z-index:10;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="scanning-overlay">名刺の本人画像にかざして</div>
+  <button id="playButton">▶ 音声を再生</button>
+
+  <audio id="voice" src="./assets/voice.mp3" preload="none"></audio>
+
+  <a-scene
+    mindar-image="imageTargetSrc: ./marker/marker.mind; filterMinCF:0.001; filterBeta:0.001;"
+    vr-mode-ui="enabled:false"
+    device-orientation-permission-ui="enabled:false"
+    renderer="colorManagement:true, physicallyCorrectLights:true"
+    color-space="sRGB">
+
+    <a-assets>
+      <a-asset-item id="avatarModel" src="./scene/model.glb"></a-asset-item>
+    </a-assets>
+
+    <a-camera look-controls="enabled:false"></a-camera>
+
+    <a-entity mindar-image-target="targetIndex:0">
+      <a-entity id="rotator" position="0 0 0" rotation="0 0 0">
+        <a-gltf-model src="#avatarModel" scale="0.85 0.85 0.85"></a-gltf-model>
+      </a-entity>
+    </a-entity>
+
+  </a-scene>
+
+  <script>
+    /* 自動回転（少し速く） */
+    AFRAME.registerComponent("auto-rotate", {
+      tick: function () {
+        this.el.object3D.rotation.y += 0.01;
+      }
+    });
+
+    /* タッチ操作 */
+    AFRAME.registerComponent("touch-control", {
+      init: function () {
+        const el = this.el;
+        let startX = null;
+        let startDist = null;
+        let startScale = 1;
+
+        const getDist = (t1, t2) =>
+          Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+
+        window.addEventListener("touchstart", (e) => {
+          if (e.touches.length === 1) {
+            startX = e.touches[0].clientX;
+          } else if (e.touches.length === 2) {
+            startDist = getDist(e.touches[0], e.touches[1]);
+            startScale = el.object3D.scale.x;
+          }
+        });
+
+        window.addEventListener("touchmove", (e) => {
+          if (e.touches.length === 1 && startX != null) {
+            const dx = e.touches[0].clientX - startX;
+            el.object3D.rotation.y += dx * 0.008;
+            startX = e.touches[0].clientX;
+          }
+
+          if (e.touches.length === 2 && startDist != null) {
+            const newDist = getDist(e.touches[0], e.touches[1]);
+            let scale = startScale * (newDist / startDist);
+
+            scale = Math.max(0.5, Math.min(2.5, scale));
+            el.object3D.scale.set(scale, scale, scale);
+          }
+        });
+
+        window.addEventListener("touchend", () => {
+          startX = null;
+          startDist = null;
+        });
+      }
+    });
+
+    const voice = document.getElementById("voice");
+    const playButton = document.getElementById("playButton");
+
+    playButton.addEventListener("click", () => {
+      voice.play();
+    });
+
+    const sceneEl = document.querySelector("a-scene");
+
+    sceneEl.addEventListener("arReady", () => {
+      document.getElementById("scanning-overlay").style.display = "none";
+    });
+
+    sceneEl.addEventListener("targetFound", () => {
+      playButton.style.display = "block";
+    });
+
+    sceneEl.addEventListener("targetLost", () => {
+      voice.pause();
+      voice.currentTime = 0;
+      playButton.style.display = "none";
+    });
+
+    window.addEventListener("load", () => {
+      const rotator = document.querySelector("#rotator");
+      rotator.setAttribute("auto-rotate", "");
+      rotator.setAttribute("touch-control", "");
+    });
+  </script>
+
+</body>
+</html>
